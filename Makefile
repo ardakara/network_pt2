@@ -4,12 +4,12 @@ SRCS = antiscanner.cpp
 
 PROG = antiscanner
 
-CFLAGS = -g -l
+CFLAGS = -o $(PROG)
 
 LIBS = -lpcap
 
 $(PROG) : $(SRCS)
-	$(CC) $(SRCS) $(LIBS)
+	$(CC) $(CFLAGS) $(SRCS) $(LIBS)
 
 clean:
 	rm -f *.o *~ $(PROG)
