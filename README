@@ -1,0 +1,18 @@
+CS155 Project 3 Part 2
+
+Arda Kara (ardakara@stanford.edu)
+Emily Stark (estark@stanford.edu)
+
+TO RUN:
+1.) Run "make" on Mac OS X
+2.) ./antiscanner PCAP_FILE
+
+IMPLEMENTATION:
+Our implementation opens the pcap file and iterates through each packet using pcap_next.
+We use a STL map to keep track of pending connections; we map string keys to "counts" structs,
+where each counts struct has the number of SYNs and SYN/ACKs seen so far. For each TCP SYN
+packet, we create the key by appending the destination IP to the source IP, and then we
+increment the SYNs count for that key. For each TCP SYN/ACK packet, we create the key
+by appending the source IP to the destination IP and incrementing the SYN/ACKs count for
+that key. After reading the entire file, we iterate through each key in the map and
+print the source and destination IP if the ratio of SYNs to SYN/ACKs is greater than 3.
