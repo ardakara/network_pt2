@@ -9,10 +9,22 @@ TO RUN:
 
 IMPLEMENTATION:
 Our implementation opens the pcap file and iterates through each packet using pcap_next.
-We use a STL map to keep track of pending connections; we map string keys to "counts" structs,
-where each counts struct has the number of SYNs and SYN/ACKs seen so far. For each TCP SYN
-packet, we create the key by appending the destination IP to the source IP, and then we
-increment the SYNs count for that key. For each TCP SYN/ACK packet, we create the key
-by appending the source IP to the destination IP and incrementing the SYN/ACKs count for
-that key. After reading the entire file, we iterate through each key in the map and
-print the source and destination IP if the ratio of SYNs to SYN/ACKs is greater than 3.
+We use a STL map (count_map) to keep track of raw counts of SYNs and SYN/ACKs. A key for
+count_map looks like this:
+SRCIP:SRCPORT#SEQ DESTIP:DESTPORT#SEQ
+For each TCP SYN or SYN/ACK packet, we create this key (switching source and destination for
+SYN/ACKs) and increment the SYN or SYN/ACK count for that key in count_map.
+
+We use another map (ratios_map) to keep track of the SYNs and SYN/ACKs that get counted
+in the actual ratio used to produce the output. A key for ratios_map looks like this:
+SRCIP DESTIP
+Every time we increment the SYN count for SRCIP:SRCPORT#SEQ DESTIP:DESTPORT#SEQ in count_map,
+we also increment the SYN count for SRCIP DESTIP in ratios_map. However, for a given key
+SRCIP:SRCPORT#SEQ DESTIP:DESTPORT#SEQ in count_map, even if we increment the SYN/ACK count
+many times in count_map for that key, we only increment the SYN/ACK count in ratios_map once
+for SRCIP:DESTIP. This is because a destination may send many SYN/ACKs if it does not
+receive ACKs for those SYN/ACKs, and we don't want to count these resent SYN/ACKs in the ratio.
+
+After doing a full pass through the file to populate count_map and ratios_map, we do
+a pass through the keys in ratios_map and print the source and destination IP if the ratio
+of SYNs to SYN/ACKs is greater than 3.
