@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include <sstream>
+#include <netinet/in.h>
 
 using namespace std;
 
@@ -19,17 +20,11 @@ struct counts {
 IP:PORT#SEQNO
 for example,
 127.0.0.1:80#1234
-Uses destination port if dest is true and source port otherwise.
+Subtracts one from seqno if ack is true.
 */
-string get_ip_str(string ip, struct tcphdr* tcp_hdr, bool dest) {
-  string port;
+string get_ip_str(string ip, u_short port, tcp_seq seqno, bool ack) {
   stringstream ss;
-  if (!dest) {
-    ss << tcp_hdr->th_sport;
-  } else {
-    ss << tcp_hdr->th_dport;
-  }
-  ss << "#" << tcp_hdr->th_seq;
+  ss << ntohs(port) << "#" << (ack ? ntohl(seqno) - 1 : ntohl(seqno));
   return ip.append(":").append(ss.str());
 }
 
@@ -78,17 +73,19 @@ int main(int argc, char* argv[]) {
       int synack = (tcp_hdr->th_flags & TH_ACK) && syn;
 
       // construct the keys to index into count_map and ratios_map
-      string count_key, ratio_key;
+      string count_key, ratio_key;      
       if (synack) {
-	count_key = get_ip_str(dest_ip, tcp_hdr, true).append(" ").append(get_ip_str(source_ip, tcp_hdr, false));
+       	count_key = get_ip_str(dest_ip, tcp_hdr->th_dport, tcp_hdr->th_ack, true).append(" ").append(get_ip_str(source_ip, tcp_hdr->th_sport, tcp_hdr->th_ack, true));
 	ratio_key = string(dest_ip).append(" ").append(string(source_ip));
       } else if (syn) {
-	count_key = get_ip_str(source_ip, tcp_hdr, false).append(" ").append(get_ip_str(dest_ip, tcp_hdr, true));
+	count_key = get_ip_str(source_ip, tcp_hdr->th_sport, tcp_hdr->th_seq, false).append(" ").append(get_ip_str(dest_ip, tcp_hdr->th_dport, tcp_hdr->th_seq, false));
 	ratio_key = string(source_ip).append(" ").append(string(dest_ip));
       }
 
       // get the SYN and SYN/ACK counts for this key and increment if necessary
       if (syn || synack) {
+	//	printf("syn: %d, synack: %d\n", syn, synack);
+	// printf("count key: %s, ratio key: %s\n", count_key.c_str(), ratio_key.c_str());
 	struct counts c = count_map[count_key];
 	if (synack) {
 	  c.syn_acks++;
@@ -100,7 +97,8 @@ int main(int argc, char* argv[]) {
 	struct counts r = ratios_map[ratio_key];
 
 	// only increment SYN/ACK count in ratios_map once per sequence number
-	if (synack && c.syn_acks == 1) r.syn_acks += 1;
+      	if (synack && c.syn_acks == 1) r.syn_acks += 1;
+	//if (synack) r.syn_acks += c.syn_acks;
 	else if (syn) r.syns += c.syns;
 	ratios_map[ratio_key] = r;
 	
@@ -113,7 +111,7 @@ int main(int argc, char* argv[]) {
   map<string, struct counts>::iterator end = ratios_map.end();
   for (map<string, struct counts>::iterator it = ratios_map.begin(); it != end; ++it) {
     struct counts r = ratios_map[it->first];
-    //printf("%s %d %d\n", it->first.c_str(), r.syns, r.syn_acks);
+    // printf("%s %d %d\n", it->first.c_str(), r.syns, r.syn_acks);
     if (it->first.compare("0 0") != 0) {
       if ((r.syn_acks == 0 && r.syns > 0) || (r.syn_acks > 0 && r.syns / r.syn_acks > 3.0)) {
 	printf("%s\n", it->first.c_str());
